@@ -237,7 +237,7 @@ warn_if_multiple_bdh() {
     for p in "${bdh_paths[@]}"; do
         local ver
         if [ -x "$p" ]; then
-            ver=$("$p" version 2>/dev/null || true)
+            ver=$("$p" :version 2>/dev/null || true)
         fi
         if [ -z "$ver" ]; then ver="<unknown version>"; fi
         echo "  $i. $p  -> $ver"
@@ -254,7 +254,7 @@ warn_if_multiple_bdh() {
             echo "To make the newly installed 'bdh' the one you get when running 'bdh', either:"
             echo "  - Remove or rename the older $first from your PATH, or"
             echo "  - Reorder your PATH so that $(dirname "$LAST_INSTALL_PATH") appears before $(dirname "$first")"
-            echo "After updating PATH, restart your shell and run 'bdh version' to confirm."
+            echo "After updating PATH, restart your shell and run 'bdh :version' to confirm."
         else
             echo "The installed 'bdh' is first in your PATH."
         fi
@@ -268,10 +268,10 @@ verify_installation() {
     # If multiple 'bdh' binaries exist on PATH, warn the user before verification
     warn_if_multiple_bdh || true
 
-    if command -v bdh >/dev/null 2>&1; then
+    if [ -n "$LAST_INSTALL_PATH" ] && [ -x "$LAST_INSTALL_PATH" ]; then
         log_success "bdh is installed and ready!"
         echo ""
-        bdh version 2>/dev/null || echo "bdh (development build)"
+        "$LAST_INSTALL_PATH" :version
         echo ""
         echo "Get started:"
         echo "  cd your-project"
@@ -281,7 +281,7 @@ verify_installation() {
         echo ""
         return 0
     else
-        log_error "bdh was installed but is not in PATH"
+        log_error "bdh was not found at the expected install path: ${LAST_INSTALL_PATH:-<unknown>}"
         return 1
     fi
 }
@@ -453,17 +453,18 @@ install_with_go() {
         log_success "bdh installed successfully via go install"
 
         # Record where we expect the binary to have been installed
-        local gobin bin_dir
+        local gobin bin_dir goexe
         gobin=$(go env GOBIN 2>/dev/null || true)
         if [ -n "$gobin" ]; then
             bin_dir="$gobin"
         else
             bin_dir="$(go env GOPATH)/bin"
         fi
-        LAST_INSTALL_PATH="$bin_dir/bdh"
+        goexe=$(go env GOEXE 2>/dev/null || true)
+        LAST_INSTALL_PATH="$bin_dir/bdh$goexe"
 
         # Re-sign for macOS to avoid Gatekeeper delays
-        resign_for_macos "$bin_dir/bdh"
+        resign_for_macos "$LAST_INSTALL_PATH"
 
         # Check if GOPATH/bin (or GOBIN) is in PATH
         if [[ ":$PATH:" != *":$bin_dir:"* ]]; then
@@ -495,7 +496,9 @@ build_from_source() {
         cd bdh
         log_info "Building binary..."
 
-        if go build -o bdh ./cmd/bdh; then
+        local output_binary
+        output_binary="bdh$(go env GOEXE 2>/dev/null || true)"
+        if go build -o "$output_binary" ./cmd/bdh; then
             # Determine install location
             local install_dir
             if [[ -w /usr/local/bin ]]; then
@@ -507,16 +510,16 @@ build_from_source() {
 
             log_info "Installing to $install_dir..."
             if [[ -w "$install_dir" ]]; then
-                mv bdh "$install_dir/"
+                mv "$output_binary" "$install_dir/"
             else
-                sudo mv bdh "$install_dir/"
+                sudo mv "$output_binary" "$install_dir/"
             fi
 
             # Re-sign for macOS to avoid Gatekeeper delays
-            resign_for_macos "$install_dir/bdh"
+            resign_for_macos "$install_dir/$output_binary"
 
-            log_success "bdh installed to $install_dir/bdh"
-            LAST_INSTALL_PATH="$install_dir/bdh"
+            log_success "bdh installed to $install_dir/$output_binary"
+            LAST_INSTALL_PATH="$install_dir/$output_binary"
 
             # Check if install_dir is in PATH
             if [[ ":$PATH:" != *":$install_dir:"* ]]; then

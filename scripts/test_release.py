@@ -60,6 +60,10 @@ class ReleaseScriptTests(unittest.TestCase):
         installer = SCRIPT.parents[1].joinpath("install.sh").read_text(encoding="utf-8")
         self.assertIn('REPO="awebai/bdh"', installer)
         self.assertIn('archive_name="${BINARY}_${VERSION}_${platform}.${ext}"', installer)
+        self.assertIn('"$LAST_INSTALL_PATH" :version', installer)
+        self.assertIn('LAST_INSTALL_PATH="$bin_dir/bdh$goexe"', installer)
+        self.assertIn('output_binary="bdh$(go env GOEXE 2>/dev/null || true)"', installer)
+        self.assertNotIn('bdh version 2>/dev/null || echo "bdh (development build)"', installer)
         self.assertNotIn("run_init", installer)
         self.assertNotIn("BEADHUB_API_KEY", installer)
 
