@@ -10,8 +10,8 @@ import (
 	"testing"
 
 	"github.com/awebai/aw/awconfig"
-	"github.com/beadhub/bdh/internal/beads"
-	"github.com/beadhub/bdh/internal/config"
+	"github.com/awebai/bdh/internal/beads"
+	"github.com/awebai/bdh/internal/config"
 )
 
 func resetInitFlags() {

@@ -12,11 +12,11 @@ import (
 	"time"
 
 	aweb "github.com/awebai/aw"
-	"github.com/beadhub/bdh/internal/bd"
-	"github.com/beadhub/bdh/internal/beads"
-	"github.com/beadhub/bdh/internal/client"
-	"github.com/beadhub/bdh/internal/config"
-	"github.com/beadhub/bdh/internal/sync"
+	"github.com/awebai/bdh/internal/bd"
+	"github.com/awebai/bdh/internal/beads"
+	"github.com/awebai/bdh/internal/client"
+	"github.com/awebai/bdh/internal/config"
+	"github.com/awebai/bdh/internal/sync"
 )
 
 const workspaceKeyMismatchDetail = "workspace_id does not match API key identity"

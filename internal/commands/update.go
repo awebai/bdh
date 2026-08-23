@@ -21,7 +21,7 @@ import (
 )
 
 const (
-	githubRepo    = "beadhub/bdh"
+	githubRepo    = "awebai/bdh"
 	githubAPIBase = "https://api.github.com"
 	githubDLBase  = "https://github.com"
 )

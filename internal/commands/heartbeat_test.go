@@ -4,7 +4,7 @@ import (
 	"os/exec"
 	"testing"
 
-	"github.com/beadhub/bdh/internal/config"
+	"github.com/awebai/bdh/internal/config"
 )
 
 func TestCanonicalizeOriginURL(t *testing.T) {

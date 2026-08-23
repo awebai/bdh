@@ -4,7 +4,7 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/beadhub/bdh/internal/client"
+	"github.com/awebai/bdh/internal/client"
 )
 
 func strPtr(s string) *string {

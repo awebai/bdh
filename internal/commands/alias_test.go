@@ -3,7 +3,7 @@ package commands
 import (
 	"testing"
 
-	"github.com/beadhub/bdh/internal/client"
+	"github.com/awebai/bdh/internal/client"
 )
 
 func TestLevenshteinDistance(t *testing.T) {

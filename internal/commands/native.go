@@ -10,7 +10,7 @@ import (
 	"time"
 
 	aweb "github.com/awebai/aw"
-	"github.com/beadhub/bdh/internal/bd"
+	"github.com/awebai/bdh/internal/bd"
 )
 
 // nativeCommands lists the bd commands that have native implementations
@@ -784,4 +784,3 @@ func nativeReopen(ctx context.Context, aw *aweb.Client, args []string, jsonMode 
 	}
 	return fmt.Sprintf("✓ Reopened %s: %s\n", resp.TaskRef, resp.Title), nil
 }
-

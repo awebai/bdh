@@ -9,8 +9,8 @@ import (
 	"testing"
 
 	aweb "github.com/awebai/aw"
-	"github.com/beadhub/bdh/internal/beads"
-	"github.com/beadhub/bdh/internal/config"
+	"github.com/awebai/bdh/internal/beads"
+	"github.com/awebai/bdh/internal/config"
 )
 
 func TestParseNativeCommand(t *testing.T) {

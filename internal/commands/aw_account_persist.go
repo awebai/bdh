@@ -7,7 +7,7 @@ import (
 	"strings"
 
 	"github.com/awebai/aw/awconfig"
-	"github.com/beadhub/bdh/internal/config"
+	"github.com/awebai/bdh/internal/config"
 )
 
 type persistAccountParams struct {

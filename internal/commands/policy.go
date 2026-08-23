@@ -14,8 +14,8 @@ import (
 
 	"github.com/spf13/cobra"
 
-	"github.com/beadhub/bdh/internal/client"
-	"github.com/beadhub/bdh/internal/config"
+	"github.com/awebai/bdh/internal/client"
+	"github.com/awebai/bdh/internal/config"
 )
 
 var (

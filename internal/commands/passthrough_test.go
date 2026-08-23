@@ -13,9 +13,9 @@ import (
 	"time"
 
 	aweb "github.com/awebai/aw"
-	"github.com/beadhub/bdh/internal/beads"
-	"github.com/beadhub/bdh/internal/client"
-	"github.com/beadhub/bdh/internal/config"
+	"github.com/awebai/bdh/internal/beads"
+	"github.com/awebai/bdh/internal/client"
+	"github.com/awebai/bdh/internal/config"
 )
 
 // setupBeadsDir creates a .beads directory with a beads.db file so that

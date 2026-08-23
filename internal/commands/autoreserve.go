@@ -12,7 +12,7 @@ import (
 	"time"
 
 	aweb "github.com/awebai/aw"
-	"github.com/beadhub/bdh/internal/config"
+	"github.com/awebai/bdh/internal/config"
 )
 
 const autoReserveReason = "auto-reserve"

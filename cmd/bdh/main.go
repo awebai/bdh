@@ -13,7 +13,7 @@ import (
 	"fmt"
 	"os"
 
-	"github.com/beadhub/bdh/internal/commands"
+	"github.com/awebai/bdh/internal/commands"
 )
 
 // Version information (set by goreleaser)

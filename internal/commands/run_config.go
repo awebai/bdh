@@ -7,7 +7,7 @@ import (
 	"path/filepath"
 
 	awrun "github.com/awebai/aw/run"
-	"github.com/beadhub/bdh/internal/config"
+	"github.com/awebai/bdh/internal/config"
 )
 
 const (

@@ -5,7 +5,7 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/beadhub/bdh/internal/client"
+	"github.com/awebai/bdh/internal/client"
 )
 
 func TestFormatListActiveOutput_GroupedByRepo(t *testing.T) {

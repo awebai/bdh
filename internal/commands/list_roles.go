@@ -5,7 +5,7 @@ import (
 
 	"github.com/spf13/cobra"
 
-	"github.com/beadhub/bdh/internal/config"
+	"github.com/awebai/bdh/internal/config"
 )
 
 var listRolesCmd = &cobra.Command{

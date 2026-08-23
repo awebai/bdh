@@ -10,8 +10,8 @@ import (
 	"time"
 
 	"github.com/awebai/aw/awconfig"
-	"github.com/beadhub/bdh/internal/client"
-	"github.com/beadhub/bdh/internal/config"
+	"github.com/awebai/bdh/internal/client"
+	"github.com/awebai/bdh/internal/config"
 )
 
 func TestFormatPolicyOutput_PlainDeterministicOrdering(t *testing.T) {

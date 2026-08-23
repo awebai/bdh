@@ -6,7 +6,7 @@ import (
 
 	"github.com/spf13/cobra"
 
-	"github.com/beadhub/bdh/internal/beads"
+	"github.com/awebai/bdh/internal/beads"
 )
 
 var forceSyncCmd = &cobra.Command{

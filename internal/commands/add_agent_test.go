@@ -11,8 +11,8 @@ import (
 	"testing"
 
 	"github.com/awebai/aw/awconfig"
-	"github.com/beadhub/bdh/internal/beads"
-	"github.com/beadhub/bdh/internal/config"
+	"github.com/awebai/bdh/internal/beads"
+	"github.com/awebai/bdh/internal/config"
 )
 
 func TestValidateNamePrefix(t *testing.T) {
@@ -281,7 +281,7 @@ func TestAddAgent_NoRole_NonTTY_ErrorsWithAvailableRoles(t *testing.T) {
 			_ = json.NewEncoder(w).Encode(map[string]any{
 				"policy_id": "pol-123",
 				"roles": map[string]any{
-					"developer": map[string]any{"title": "Developer"},
+					"developer":   map[string]any{"title": "Developer"},
 					"coordinator": map[string]any{"title": "Coordinator"},
 				},
 			})

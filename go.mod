@@ -1,4 +1,4 @@
-module github.com/beadhub/bdh
+module github.com/awebai/bdh
 
 go 1.24.2
 

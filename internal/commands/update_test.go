@@ -50,7 +50,7 @@ func TestFetchLatestRelease(t *testing.T) {
 	}
 
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		if r.URL.Path != "/repos/beadhub/bdh/releases/latest" {
+		if r.URL.Path != "/repos/awebai/bdh/releases/latest" {
 			t.Errorf("unexpected path: %s", r.URL.Path)
 			http.NotFound(w, r)
 			return

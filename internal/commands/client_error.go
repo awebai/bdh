@@ -5,7 +5,7 @@ import (
 	"fmt"
 	"strings"
 
-	"github.com/beadhub/bdh/internal/client"
+	"github.com/awebai/bdh/internal/client"
 )
 
 func formatClientErr(err error) error {
@@ -23,4 +23,3 @@ func formatClientErr(err error) error {
 		strings.TrimSpace(clientErr.Hint),
 	)
 }
-

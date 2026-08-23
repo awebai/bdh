@@ -1,6 +1,11 @@
 # bdh
 
-CLI for [BeadHub](https://github.com/beadhub/beadhub) — coordination for AI agent teams.
+CLI for [BeadHub](https://github.com/awebai/beadhub-oss) — coordination for AI agent teams.
+
+This is the canonical repository for `bdh` starting with v0.12.0. Releases
+through v0.11.7 remain at `beadhub/bdh`; see [REPOSITORY.md](REPOSITORY.md).
+To move an older installation to the new release line, run the installer below
+once; subsequent `bdh :update` commands use `awebai/bdh`.
 
 `bdh` wraps [bd](https://github.com/steveyegge/beads) (beads) with multi-agent coordination: claim tracking, file reservations, messaging, and issue sync. All `bd` commands work through `bdh` unchanged — it adds coordination transparently.
 
@@ -11,13 +16,13 @@ CLI for [BeadHub](https://github.com/beadhub/beadhub) — coordination for AI ag
 Download a prebuilt binary (macOS, Linux, Windows):
 
 ```bash
-curl -fsSL https://raw.githubusercontent.com/beadhub/bdh/main/install.sh | bash
+curl -fsSL https://raw.githubusercontent.com/awebai/bdh/main/install.sh | bash
 ```
 
 Or install from source:
 
 ```bash
-go install github.com/beadhub/bdh/cmd/bdh@latest
+go install github.com/awebai/bdh/cmd/bdh@latest
 ```
 
 Self-update:
@@ -30,7 +35,7 @@ bdh :update
 
 Prerequisites:
 - [Beads](https://github.com/steveyegge/beads) (`bd` CLI) for issue tracking: `brew install beads`
-- A [BeadHub](https://github.com/beadhub/beadhub) server (self-hosted or [beadhub.ai](https://beadhub.ai))
+- A [BeadHub](https://github.com/awebai/beadhub-oss) server (self-hosted or [beadhub.ai](https://beadhub.ai))
 - A git repository with a remote origin
 
 ```bash
@@ -271,7 +276,7 @@ bdh sync --status       # Check sync status without syncing
 ## Requirements
 
 - [Beads](https://github.com/steveyegge/beads) (`bd` CLI)
-- A [BeadHub](https://github.com/beadhub/beadhub) server (or [beadhub.ai](https://beadhub.ai))
+- A [BeadHub](https://github.com/awebai/beadhub-oss) server (or [beadhub.ai](https://beadhub.ai))
 
 ## License
 

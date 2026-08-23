@@ -10,8 +10,8 @@ import (
 	"sync"
 
 	aweb "github.com/awebai/aw"
-	"github.com/beadhub/bdh/internal/client"
-	"github.com/beadhub/bdh/internal/config"
+	"github.com/awebai/bdh/internal/client"
+	"github.com/awebai/bdh/internal/config"
 )
 
 // NotificationContext contains all notification data fetched from BeadHub.

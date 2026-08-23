@@ -7,7 +7,7 @@ import (
 	"testing"
 
 	awconfig "github.com/awebai/aw/awconfig"
-	"github.com/beadhub/bdh/internal/config"
+	"github.com/awebai/bdh/internal/config"
 )
 
 func TestLoadRunUserConfigMissingReturnsZero(t *testing.T) {

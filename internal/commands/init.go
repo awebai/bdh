@@ -14,9 +14,9 @@ import (
 	"github.com/spf13/cobra"
 	"golang.org/x/term"
 
-	"github.com/beadhub/bdh/internal/beads"
-	"github.com/beadhub/bdh/internal/client"
-	"github.com/beadhub/bdh/internal/config"
+	"github.com/awebai/bdh/internal/beads"
+	"github.com/awebai/bdh/internal/client"
+	"github.com/awebai/bdh/internal/config"
 )
 
 const defaultWorkspaceRole = "developer"

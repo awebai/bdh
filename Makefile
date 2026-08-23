@@ -1,4 +1,4 @@
-.PHONY: help build test tidy fmt clean
+.PHONY: help build test tidy fmt clean release-build release-verify release-publish
 
 GOCACHE ?= $(CURDIR)/.cache/go-build
 GOMODCACHE ?= $(CURDIR)/.cache/go-mod
@@ -11,6 +11,9 @@ help:
 	@echo "  tidy    go mod tidy"
 	@echo "  fmt     gofmt -w ./..."
 	@echo "  clean   Remove built binary"
+	@echo "  release-build    Build immutable release stage (VERSION=X.Y.Z)"
+	@echo "  release-verify   Verify staged release bytes (VERSION=X.Y.Z)"
+	@echo "  release-publish  Publish staged bytes (VERSION=X.Y.Z CONFIRM=awebai/bdh@vX.Y.Z)"
 
 build:
 	$(GOENV) go build -o bdh ./cmd/bdh
@@ -26,3 +29,12 @@ fmt:
 
 clean:
 	rm -f bdh
+
+release-build:
+	python3 scripts/release.py build --version "$(VERSION)"
+
+release-verify:
+	python3 scripts/release.py verify --stage ".release-stage/v$(VERSION)"
+
+release-publish:
+	python3 scripts/release.py publish --stage ".release-stage/v$(VERSION)" --confirm "$(CONFIRM)"

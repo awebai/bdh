@@ -1,10 +1,10 @@
 #!/usr/bin/env bash
 #
 # bdh (BeadHub CLI) installation script
-# Usage: curl -fsSL https://raw.githubusercontent.com/beadhub/bdh/main/install.sh | bash
+# Usage: curl -fsSL https://raw.githubusercontent.com/awebai/bdh/main/install.sh | bash
 #
 # Security note: For maximum security, download and inspect the script first:
-#   curl -fsSL https://raw.githubusercontent.com/beadhub/bdh/main/install.sh > install.sh
+#   curl -fsSL https://raw.githubusercontent.com/awebai/bdh/main/install.sh > install.sh
 #   less install.sh  # Review the script
 #   bash install.sh
 #
@@ -15,7 +15,7 @@
 
 set -e
 
-REPO="beadhub/bdh"
+REPO="awebai/bdh"
 BINARY="bdh"
 
 # Track where we installed for PATH warning messages
@@ -303,7 +303,7 @@ install_from_release() {
         binary="bdh.exe"
     fi
 
-    local archive_name="${binary}_${VERSION}_${platform}.${ext}"
+    local archive_name="${BINARY}_${VERSION}_${platform}.${ext}"
     local url="https://github.com/$REPO/releases/download/v$VERSION/$archive_name"
     local checksums_url="https://github.com/$REPO/releases/download/v$VERSION/checksums.txt"
 
@@ -543,30 +543,8 @@ build_from_source() {
     fi
 }
 
-# Run bdh :init with API key if one was provided.
-# Passes the key via environment variable to avoid exposing it in process listings.
-run_init_with_api_key() {
-    local api_key=$1
-    if [ -z "$api_key" ]; then
-        return 0
-    fi
-    echo ""
-    log_info "API key detected, running bdh :init..."
-    # Use --refresh-key so rerunning the installer repairs coordination state in an
-    # already-initialized workspace (e.g., when an unbound project key was used).
-    if ! BEADHUB_API_KEY="$api_key" bdh :init --refresh-key; then
-        log_warning "bdh :init failed. You can retry manually:"
-        echo "  BEADHUB_API_KEY=<your-key> bdh :init --refresh-key"
-    fi
-}
-
 # Main installation flow
 main() {
-    local api_key=""
-    if [ $# -ge 1 ] && echo "$1" | grep -qE '^(bh_sk_|aw_sk_).{32,}$'; then
-        api_key="$1"
-    fi
-
     echo ""
     echo "🔗 bdh (BeadHub CLI) Installer"
     echo ""
@@ -579,7 +557,6 @@ main() {
     # Try downloading from GitHub releases first
     if install_from_release "$platform"; then
         verify_installation
-        run_init_with_api_key "$api_key"
         exit 0
     fi
 
@@ -589,7 +566,6 @@ main() {
     if check_go; then
         if install_with_go; then
             verify_installation
-            run_init_with_api_key "$api_key"
             exit 0
         fi
     fi
@@ -613,7 +589,6 @@ main() {
 
     if build_from_source; then
         verify_installation
-        run_init_with_api_key "$api_key"
         exit 0
     fi
 

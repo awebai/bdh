@@ -13,7 +13,7 @@ import (
 	"testing"
 
 	aweb "github.com/awebai/aw"
-	"github.com/beadhub/bdh/internal/config"
+	"github.com/awebai/bdh/internal/config"
 )
 
 func TestParseGitStatusPorcelainV1Z_ParsesRenameEntries(t *testing.T) {

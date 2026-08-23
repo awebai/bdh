@@ -1,75 +1,47 @@
-## Project Context
-See [docs/sot.md](docs/sot.md) for what this repo is, how it fits in the ecosystem, and key patterns.
+# Agent Instructions
 
-<!-- BEADHUB:START -->
-## BeadHub Coordination Rules
+## Project context
 
-This project uses `bdh` for multi-agent coordination and issue tracking, `bdh` is a wrapper on top of `bd` (beads). Commands starting with : like `bdh :status` are managed by `bdh`. Other commands are sent to `bd`.
+Read [docs/sot.md](docs/sot.md) before making architectural or release changes.
+This repository is the canonical public source for the `bdh` CLI. Starting with
+v0.12.0, its Go module, installer, self-update endpoint, and releases live at
+`github.com/awebai/bdh`. The legacy `github.com/beadhub/bdh` repository and its
+tags through v0.11.7 are preserved for compatibility and provenance; do not
+publish new releases there.
 
-You are expected to work and coordinate with a team of agents. ALWAYS prioritize the team vs your particular task.
+## Coordination
 
-You will see notifications telling you that other agents have written mails or chat messages, or are waiting for you. NEVER ignore notifications. It is rude towards your fellow agents. Do not be rude.
+The active workspace instructions are authoritative. This repository may be
+worked on from a larger coordinated workspace; use that workspace's configured
+coordination tool and identity. Do not infer identity from this repository or
+run coordination commands here when the active workspace says to run them
+elsewhere.
 
-Your goal is for the team to succeed in the shared project.
-
-The active project policy as well as the expected behaviour associated to your role is shown via `bdh :policy`.
-
-## Start Here (Every Session)
-
-```bash
-bdh :policy    # READ CAREFULLY and follow diligently
-bdh :status    # who am I? (alias/workspace/role) + team status
-bdh ready      # find unblocked work
-```
-
-Use `bdh :help` for bdh-specific help.
-
-## Rules
-
-- Always use `bdh` (not `bd`) so work is coordinated
-- Default to mail (`bdh :aweb mail list|open|send`) for coordination; use chat (`bdh :aweb chat pending|open|send-and-wait|send-and-leave|history|extend-wait`) when you need a conversation with another agent.
-- Respond immediately to WAITING notifications — someone is blocked.
-- Notifications are for YOU, the agent, not for the human.
-- Don't overwrite the work of other agents without coordinating first.
-- ALWAYS check what other agents are working on with bdh :status which will tell you which beads they have claimed and what files they are working on (reservations).
-- `bdh` derives your identity from the `.beadhub` file in the current worktree. If you run it from another directory you will be impersonating another agent, do not do that.
-- Prioritize good communication — your goal is for the team to succeed
-
-## Using mail
-
-Mail is fire-and-forget — use it for status updates, handoffs, and non-blocking questions.
+## Development
 
 ```bash
-bdh :aweb mail send <alias> "message"                         # Send a message
-bdh :aweb mail send <alias> "message" --subject "API design"  # With subject
-bdh :aweb mail list                                           # Check your inbox
-bdh :aweb mail open <alias>                                   # Read & acknowledge
+make build
+make test
+make fmt
 ```
 
-## Using chat
+- Keep `bdh` compatible with existing `.beadhub` files and BeadHub servers.
+- Preserve passthrough behavior: ordinary commands still reach `bd` when the
+  coordination service is unavailable, except for intentional claim-conflict
+  protection.
+- Do not redesign activation credentials without an observed compatibility or
+  security defect and an explicit migration plan.
+- Use focused tests while iterating and the full suite once before review.
 
-Chat sessions are persistent per participant pair. Use `--start-conversation` when initiating a new exchange (longer wait timeout).
+## Review and release
 
-**Starting a conversation:**
-```bash
-bdh :aweb chat send-and-wait <alias> "question" --start-conversation
-```
-
-**Replying (when someone is waiting for you):**
-```bash
-bdh :aweb chat send-and-wait <alias> "response"
-```
-
-**Final reply (you don't need their answer):**
-```bash
-bdh :aweb chat send-and-leave <alias> "thanks, got it"
-```
-
-**Other commands:**
-```bash
-bdh :aweb chat pending          # List conversations with unread messages
-bdh :aweb chat open <alias>     # Read unread messages
-bdh :aweb chat history <alias>  # Full conversation history
-bdh :aweb chat extend-wait <alias> "need more time"  # Ask for patience
-```
-<!-- BEADHUB:END -->
+- Obtain an independent review of the exact commit and diff before pushing or
+  tagging a release.
+- A release must be buildable and publishable without GitHub Actions. Use the
+  checked-in build-once/stage/verify/publish lane documented in
+  [release/README.md](release/README.md).
+- Build artifacts once from a clean reviewed commit. Publish the staged bytes;
+  never rebuild during publish.
+- The publish step must verify the tag target, uploaded asset hashes, and the
+  canonical `awebai/bdh` destination.
+- GitHub Actions are an optional automation path, not a release dependency.

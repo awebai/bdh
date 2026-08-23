@@ -34,12 +34,18 @@ Client-side tool. Talks to the BeadHub server API over HTTP. Identity derived fr
 - `bdh` owns bead-specific behavior on top of that runtime: dispatch prioritization (chat/mail/claim/ready), autofeed policy, and coordination-oriented prompt shaping.
 - `--debug` keeps a legacy local loop for diagnostics while migration cleanup is in progress.
 
-## Release
+## Repository and Release
 
-GoReleaser on git tags. Workflow: `.github/workflows/bdh-release.yml`. Produces binaries for multiple platforms.
+`github.com/awebai/bdh` is canonical starting with v0.12.0. The complete legacy
+history and releases through v0.11.7 remain at `github.com/beadhub/bdh`; see
+[`REPOSITORY.md`](../REPOSITORY.md).
+
+The primary release path is the runnerless build-once/stage/verify/publish lane
+documented in [`release/README.md`](../release/README.md). GitHub Actions and
+GoReleaser are optional automation for future tags, not release dependencies.
 
 ## Install
 
 ```bash
-curl -fsSL https://raw.githubusercontent.com/beadhub/bdh/main/install.sh | bash
+curl -fsSL https://raw.githubusercontent.com/awebai/bdh/main/install.sh | bash
 ```

@@ -7,7 +7,7 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/beadhub/bdh/internal/config"
+	"github.com/awebai/bdh/internal/config"
 )
 
 func TestGetBeadsDir_NonGitDirectory(t *testing.T) {

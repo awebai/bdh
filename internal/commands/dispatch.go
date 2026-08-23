@@ -8,9 +8,9 @@ import (
 	"strings"
 
 	aweb "github.com/awebai/aw"
-	"github.com/beadhub/bdh/internal/bd"
-	"github.com/beadhub/bdh/internal/beads"
-	"github.com/beadhub/bdh/internal/config"
+	"github.com/awebai/bdh/internal/bd"
+	"github.com/awebai/bdh/internal/beads"
+	"github.com/awebai/bdh/internal/config"
 )
 
 type runDispatcher interface {

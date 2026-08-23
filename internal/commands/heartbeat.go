@@ -10,8 +10,8 @@ import (
 	"strings"
 	"time"
 
-	"github.com/beadhub/bdh/internal/client"
-	"github.com/beadhub/bdh/internal/config"
+	"github.com/awebai/bdh/internal/client"
+	"github.com/awebai/bdh/internal/config"
 )
 
 // loadAndValidateConfig loads the .beadhub config file, validates it, and
