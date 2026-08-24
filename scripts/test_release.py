@@ -2,6 +2,7 @@ import importlib.util
 import json
 import tempfile
 import unittest
+from unittest import mock
 from pathlib import Path
 
 
@@ -13,6 +14,30 @@ SPEC.loader.exec_module(release)
 
 
 class ReleaseScriptTests(unittest.TestCase):
+    def test_release_gate_runs_the_complete_required_suites(self):
+        with mock.patch.object(release, "run", return_value="") as runner:
+            gate = release.run_test_gate(Path("/tmp/source"), "a" * 40, None)
+        self.assertEqual(gate["status"], "passed")
+        self.assertEqual(gate["completed"], [" ".join(command) for command in release.TEST_GATE_COMMANDS])
+        self.assertEqual(
+            [call.args[0] for call in runner.call_args_list],
+            [list(command) for command in release.TEST_GATE_COMMANDS],
+        )
+
+    def test_release_gate_fails_closed_without_an_explicit_override(self):
+        with mock.patch.object(release, "run", side_effect=release.ReleaseError("red")):
+            with self.assertRaisesRegex(release.ReleaseError, "release test gate failed"):
+                release.run_test_gate(Path("/tmp/source"), "a" * 40, None)
+
+    def test_release_gate_records_an_explicit_human_risk_override(self):
+        with mock.patch.object(release, "run", side_effect=release.ReleaseError("runner unavailable")):
+            gate = release.run_test_gate(
+                Path("/tmp/source"), "a" * 40, "incident 123: hosted runners unavailable"
+            )
+        self.assertEqual(gate["status"], "risk_accepted")
+        self.assertEqual(gate["failed_command"], "go test ./...")
+        self.assertIn("incident 123", gate["risk_acceptance"])
+
     def test_normalize_version(self):
         self.assertEqual(release.normalize_version("0.12.0"), ("0.12.0", "v0.12.0"))
         self.assertEqual(release.normalize_version("v1.2.3"), ("1.2.3", "v1.2.3"))
@@ -71,7 +96,7 @@ class ReleaseScriptTests(unittest.TestCase):
         with tempfile.TemporaryDirectory() as directory:
             stage = Path(directory)
             stage.joinpath("release-receipt.json").write_text(
-                json.dumps({"format_version": 2}), encoding="utf-8"
+                json.dumps({"format_version": release.RECEIPT_FORMAT_VERSION + 1}), encoding="utf-8"
             )
             stage.joinpath("checksums.txt").write_text("", encoding="utf-8")
             with self.assertRaisesRegex(release.ReleaseError, "format_version"):
@@ -82,6 +107,7 @@ class ReleaseScriptTests(unittest.TestCase):
         self.assertIn("workflow_dispatch:", workflow)
         self.assertNotIn("push:\n    tags:", workflow)
         self.assertIn("refusing to replace runnerless artifacts", workflow)
+        self.assertIn('git merge-base --is-ancestor "$GITHUB_SHA" origin/main', workflow)
 
     def test_publication_modes_keep_public_releases_immutable(self):
         tag = "v0.12.0"

@@ -11,7 +11,7 @@ help:
 	@echo "  tidy    go mod tidy"
 	@echo "  fmt     gofmt -w ./..."
 	@echo "  clean   Remove built binary"
-	@echo "  release-build    Build immutable release stage (VERSION=X.Y.Z)"
+	@echo "  release-build    Test, then build immutable release stage (VERSION=X.Y.Z)"
 	@echo "  release-verify   Verify staged release bytes (VERSION=X.Y.Z)"
 	@echo "  release-publish  Publish staged bytes (VERSION=X.Y.Z CONFIRM=awebai/bdh@vX.Y.Z)"
 
@@ -31,7 +31,7 @@ clean:
 	rm -f bdh
 
 release-build:
-	python3 scripts/release.py build --version "$(VERSION)"
+	python3 scripts/release.py build --version "$(VERSION)" $(if $(RISK_ACCEPTANCE),--risk-acceptance "$(RISK_ACCEPTANCE)",)
 
 release-verify:
 	python3 scripts/release.py verify --stage ".release-stage/v$(VERSION)"

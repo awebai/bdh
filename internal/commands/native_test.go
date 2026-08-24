@@ -603,6 +603,7 @@ func TestPassthrough_NativeModeListWorks(t *testing.T) {
 
 	// NO .beads directory — native mode
 	beads.ResetCache()
+	t.Setenv("BEADHUB_API_KEY", "aw_sk_test_123456789012345678901234567890123456")
 
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		switch r.URL.Path {
@@ -1883,6 +1884,7 @@ func TestPassthrough_NativeModeUnsupportedCommand(t *testing.T) {
 	os.Chdir(tmpDir)
 
 	beads.ResetCache()
+	t.Setenv("BEADHUB_API_KEY", "aw_sk_test_123456789012345678901234567890123456")
 
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		switch r.URL.Path {

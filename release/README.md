@@ -6,10 +6,10 @@ Actions is optional and is not needed for any step.
 
 ## 1. Prepare and review
 
-Choose a stable semantic version at or above v0.12.0, update release-facing
-documentation, and run the normal test suite. Commit the result, merge `origin/main`, and obtain an
-independent ACK for the exact commit and cumulative diff. The release worktree
-must be clean and `origin` must be `awebai/bdh`.
+Choose a stable semantic version at or above v0.12.0 and update release-facing
+documentation. Commit the result, merge `origin/main`, and obtain an independent
+ACK for the exact commit and cumulative diff. The release worktree must be clean
+and `origin` must be `awebai/bdh`.
 
 ## 2. Build once
 
@@ -17,10 +17,19 @@ must be clean and `origin` must be `awebai/bdh`.
 make release-build VERSION=0.12.0
 ```
 
-The command cross-compiles macOS, Linux, and Windows archives for amd64 and
-arm64 under `.release-stage/v0.12.0/`. It refuses an existing stage rather than
-overwriting it. `release-receipt.json` records the full source commit, clean-tree
-assertion, Go toolchain, platform list, sizes, and SHA-256 hashes.
+The command first runs `go test ./...` and
+`python3 -m unittest scripts/test_release.py`, then cross-compiles macOS, Linux,
+and Windows archives for amd64 and arm64 under `.release-stage/v0.12.0/`. It
+refuses an existing stage rather than overwriting it. `release-receipt.json`
+records the full source commit, exact test gate, clean-tree assertion, Go
+toolchain, platform list, sizes, and SHA-256 hashes.
+
+Publication rejects a receipt without the required gate. In an urgent release
+where the gate infrastructure itself is unavailable, a human may explicitly
+record the accepted risk with
+`RISK_ACCEPTANCE="<incident and reason>" make release-build VERSION=0.12.0`.
+That reason is written into the public receipt and release notes. This is not
+the normal path and must not be used to conceal a product test failure.
 
 ## 3. Verify the staged bytes
 

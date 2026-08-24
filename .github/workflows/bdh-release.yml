@@ -49,6 +49,11 @@ jobs:
             echo "Release $GITHUB_REF_NAME already exists; refusing to replace runnerless artifacts" >&2
             exit 1
           fi
+          git fetch origin main
+          if ! git merge-base --is-ancestor "$GITHUB_SHA" origin/main; then
+            echo "Release source $GITHUB_SHA is not on canonical main" >&2
+            exit 1
+          fi
 
       - name: Run GoReleaser
         uses: goreleaser/goreleaser-action@v6

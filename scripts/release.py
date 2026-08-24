@@ -31,6 +31,11 @@ PLATFORMS = (
 )
 VERSION_RE = re.compile(r"^(?:v)?(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)$")
 MINIMUM_VERSION = (0, 12, 0)
+RECEIPT_FORMAT_VERSION = 2
+TEST_GATE_COMMANDS = (
+    ("go", "test", "./..."),
+    ("python3", "-m", "unittest", "scripts/test_release.py"),
+)
 
 
 class ReleaseError(RuntimeError):
@@ -131,7 +136,40 @@ def require_clean(root: Path) -> None:
         raise ReleaseError("release builds require a clean worktree:\n" + status)
 
 
-def build_release(root: Path, version_input: str, stage_arg: str | None) -> Path:
+def run_test_gate(root: Path, source_sha: str, risk_acceptance: str | None) -> dict[str, object]:
+    completed: list[str] = []
+    for command in TEST_GATE_COMMANDS:
+        rendered = " ".join(command)
+        try:
+            run(list(command), cwd=root)
+            completed.append(rendered)
+        except ReleaseError as error:
+            if not risk_acceptance:
+                raise ReleaseError(f"release test gate failed at {rendered}: {error}") from error
+            return {
+                "status": "risk_accepted",
+                "source_sha": source_sha,
+                "commands": [" ".join(item) for item in TEST_GATE_COMMANDS],
+                "completed": completed,
+                "failed_command": rendered,
+                "risk_acceptance": risk_acceptance,
+            }
+    return {
+        "status": "passed",
+        "source_sha": source_sha,
+        "commands": [" ".join(item) for item in TEST_GATE_COMMANDS],
+        "completed": completed,
+        "failed_command": None,
+        "risk_acceptance": None,
+    }
+
+
+def build_release(
+    root: Path,
+    version_input: str,
+    stage_arg: str | None,
+    risk_acceptance: str | None = None,
+) -> Path:
     version, tag = normalize_version(version_input)
     require_canonical_origin(root)
     require_clean(root)
@@ -141,6 +179,7 @@ def build_release(root: Path, version_input: str, stage_arg: str | None) -> Path
     source_epoch = int(run(["git", "show", "-s", "--format=%ct", source_sha], cwd=root))
     source_date = run(["git", "show", "-s", "--format=%cI", source_sha], cwd=root)
     go_version = run(["go", "version"], cwd=root)
+    test_gate = run_test_gate(root, source_sha, risk_acceptance)
 
     stage = (root / (stage_arg or f".release-stage/{tag}")).resolve()
     release_parent = (root / ".release-stage").resolve()
@@ -190,7 +229,7 @@ def build_release(root: Path, version_input: str, stage_arg: str | None) -> Path
         checksum_lines = [f"{item['sha256']}  {item['name']}" for item in assets]
         (temporary / "checksums.txt").write_text("\n".join(checksum_lines) + "\n", encoding="utf-8")
         receipt = {
-            "format_version": 1,
+            "format_version": RECEIPT_FORMAT_VERSION,
             "repository": REPOSITORY,
             "module": MODULE,
             "version": version,
@@ -199,6 +238,7 @@ def build_release(root: Path, version_input: str, stage_arg: str | None) -> Path
             "source_date": source_date,
             "source_tree_clean": True,
             "builder": go_version,
+            "test_gate": test_gate,
             "assets": assets,
         }
         (temporary / "release-receipt.json").write_text(
@@ -274,7 +314,7 @@ def verify_stage(root: Path, stage: Path) -> dict[str, object]:
     if not receipt_path.is_file() or not checksums_path.is_file():
         raise ReleaseError(f"stage lacks release-receipt.json or checksums.txt: {stage}")
     receipt = json.loads(receipt_path.read_text(encoding="utf-8"))
-    if receipt.get("format_version") != 1:
+    if receipt.get("format_version") != RECEIPT_FORMAT_VERSION:
         raise ReleaseError("unsupported or missing release receipt format_version")
     if receipt.get("repository") != REPOSITORY or receipt.get("module") != MODULE:
         raise ReleaseError("receipt does not name the canonical repository and module")
@@ -285,6 +325,21 @@ def verify_stage(root: Path, stage: Path) -> dict[str, object]:
     source_date = str(receipt.get("source_date", ""))
     if not re.fullmatch(r"[0-9a-f]{40}", source_sha):
         raise ReleaseError("receipt source_sha is not a full Git commit id")
+    test_gate = receipt.get("test_gate")
+    expected_commands = [" ".join(item) for item in TEST_GATE_COMMANDS]
+    if not isinstance(test_gate, dict):
+        raise ReleaseError("receipt lacks the required test gate")
+    if test_gate.get("source_sha") != source_sha or test_gate.get("commands") != expected_commands:
+        raise ReleaseError("receipt test gate does not match the release source and required suites")
+    gate_status = test_gate.get("status")
+    if gate_status == "passed":
+        if test_gate.get("completed") != expected_commands or test_gate.get("risk_acceptance") is not None:
+            raise ReleaseError("receipt passed test gate is incomplete")
+    elif gate_status == "risk_accepted":
+        if not str(test_gate.get("risk_acceptance", "")).strip() or not test_gate.get("failed_command"):
+            raise ReleaseError("receipt risk override lacks an explicit reason or failed command")
+    else:
+        raise ReleaseError("receipt test gate did not pass and has no explicit risk acceptance")
     actual_source_date = run(["git", "show", "-s", "--format=%cI", f"{source_sha}^{{commit}}"], cwd=root)
     if source_date != actual_source_date:
         raise ReleaseError("receipt source_date does not match its Git commit")
@@ -414,7 +469,14 @@ def publish_release(root: Path, stage: Path, confirmation: str) -> None:
     state = release_state(root, tag)
     mode = publication_mode(state, tag, expected_remote_assets)
     if mode == "create":
-        notes = f"bdh {tag}\n\nSource: {source_sha}\n\nSee release-receipt.json for the build receipt."
+        gate = receipt["test_gate"]
+        gate_note = "required suites passed"
+        if gate["status"] == "risk_accepted":
+            gate_note = f"RISK ACCEPTED: {gate['risk_acceptance']}"
+        notes = (
+            f"bdh {tag}\n\nSource: {source_sha}\n\nRelease gate: {gate_note}."
+            "\n\nSee release-receipt.json for the build and test receipt."
+        )
         run(
             [
                 "gh",
@@ -474,6 +536,10 @@ def parse_args(argv: list[str]) -> argparse.Namespace:
     build = subparsers.add_parser("build", help="build all platform artifacts into a new immutable stage")
     build.add_argument("--version", required=True)
     build.add_argument("--stage")
+    build.add_argument(
+        "--risk-acceptance",
+        help="explicit human reason for proceeding when a required suite cannot pass",
+    )
     verify = subparsers.add_parser("verify", help="verify a previously built stage")
     verify.add_argument("--stage", required=True)
     publish = subparsers.add_parser("publish", help="publish and download-verify a stage")
@@ -487,7 +553,7 @@ def main(argv: list[str]) -> int:
         args = parse_args(argv)
         root = repository_root()
         if args.command == "build":
-            build_release(root, args.version, args.stage)
+            build_release(root, args.version, args.stage, args.risk_acceptance)
         elif args.command == "verify":
             verify_stage(root, (root / args.stage).resolve())
         else:

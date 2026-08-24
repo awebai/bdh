@@ -39,6 +39,19 @@ func setupBeadsDirWithoutDB(t *testing.T) {
 	beads.ResetCache()
 }
 
+func stubBdVersion(t *testing.T) {
+	t.Helper()
+	if runtime.GOOS == "windows" {
+		t.Skip("test uses a sh stub for bd")
+	}
+	binDir := t.TempDir()
+	bdPath := filepath.Join(binDir, "bd")
+	if err := os.WriteFile(bdPath, []byte("#!/bin/sh\nprintf 'bd version test\\n'\n"), 0755); err != nil {
+		t.Fatalf("write bd stub: %v", err)
+	}
+	t.Setenv("PATH", binDir+string(os.PathListSeparator)+os.Getenv("PATH"))
+}
+
 func TestPassthrough_PreservesArgsWhenInvokingBd(t *testing.T) {
 	if runtime.GOOS == "windows" {
 		t.Skip("test uses a sh stub for bd")
@@ -432,6 +445,7 @@ func TestPassthrough_RunsBdWhenServerUnreachable(t *testing.T) {
 
 	// Create .beads directory
 	setupBeadsDir(t)
+	stubBdVersion(t)
 
 	// Create .beadhub config pointing to unreachable server
 	cfg := &config.Config{
@@ -467,6 +481,7 @@ func TestPassthrough_ShowsWarningWhenServerUnreachable(t *testing.T) {
 	os.Chdir(tmpDir)
 
 	setupBeadsDir(t)
+	stubBdVersion(t)
 
 	cfg := &config.Config{
 		WorkspaceID:     "a1b2c3d4-5678-90ab-cdef-1234567890ab",
@@ -480,7 +495,10 @@ func TestPassthrough_ShowsWarningWhenServerUnreachable(t *testing.T) {
 	}
 	cfg.Save()
 
-	result, _ := runPassthrough([]string{"--version"})
+	result, err := runPassthrough([]string{"--version"})
+	if err != nil {
+		t.Fatalf("runPassthrough should not error when server unreachable, got: %v", err)
+	}
 
 	// Should contain a warning about server being unreachable
 	if !strings.Contains(result.Warning, "BeadHub unreachable") {
