@@ -458,40 +458,60 @@ func runPassthrough(args []string) (*PassthroughResult, error) {
 	}
 
 	if beads.HasBeadsDir() {
-		// bd mode: pass through to bd binary
-		runner := bd.New()
-		bdResult, err := runner.Run(context.Background(), cleanArgs)
-		if err != nil {
-			return nil, fmt.Errorf("running bd: %w", err)
-		}
-
-		result.Stdout = bdResult.Stdout
-		result.Stderr = bdResult.Stderr
-		result.ExitCode = bdResult.ExitCode
-
-		// Sync after mutation commands (non-blocking - just warn on failure)
-		if bd.IsMutationCommand(cleanArgs) && bdResult.ExitCode == 0 {
-			syncResult := syncToBeadHub(cfg, cleanArgs, verbose)
-			if syncResult.Warning != "" {
-				result.SyncWarning = syncResult.Warning
+		// `sync` is a bdh operation even in local Beads mode. Current Beads
+		// releases no longer expose `bd sync`; bdh already owns the JSONL export
+		// and BeadHub upload performed after mutation commands, so invoke that
+		// path directly instead of passing a removed command to bd.
+		if bd.CommandFromArgs(cleanArgs) == "sync" {
+			statusOnly, parseErr := parseExplicitSyncArgs(cleanArgs)
+			if parseErr != nil {
+				return nil, parseErr
 			}
-			result.SyncStats = syncResult.Stats
-			result.SyncMode = syncResult.SyncMode
-			result.SyncConflicts = syncResult.Conflicts
-			result.SyncClaimRejected = syncResult.ClaimRejected
-			result.SyncClaimRejectedReason = syncResult.ClaimRejectedReason
-		}
+			if statusOnly {
+				result.Stdout, err = formatExplicitSyncStatus(result.JSONMode)
+				if err != nil {
+					return nil, err
+				}
+				result.ExitCode = 0
+			} else {
+				syncResult := syncToBeadHub(cfg, cleanArgs, verbose)
+				applySyncResult(result, syncResult)
+				if failure := explicitSyncFailure(syncResult); failure != "" {
+					result.SyncWarning = failure
+					result.ExitCode = 1
+				} else {
+					result.ExitCode = 0
+				}
+			}
+		} else {
+			// bd mode: pass through to bd binary
+			runner := bd.New()
+			bdResult, err := runner.Run(context.Background(), cleanArgs)
+			if err != nil {
+				return nil, fmt.Errorf("running bd: %w", err)
+			}
 
-		// For successful close commands, find related work in progress
-		if isCloseCommandFromArgs(cleanArgs) && bdResult.ExitCode == 0 {
-			closedBeadID := extractBeadIDFromArgs(cleanArgs)
-			if closedBeadID != "" {
-				if cmdResp != nil && cmdResp.Context != nil {
-					result.RelatedWork = findRelatedWorkInProgress(
-						closedBeadID,
-						cfg.WorkspaceID,
-						cmdResp.Context.BeadsInProgress,
-					)
+			result.Stdout = bdResult.Stdout
+			result.Stderr = bdResult.Stderr
+			result.ExitCode = bdResult.ExitCode
+
+			// Sync after mutation commands (non-blocking - just warn on failure)
+			if bd.IsMutationCommand(cleanArgs) && bdResult.ExitCode == 0 {
+				syncResult := syncToBeadHub(cfg, cleanArgs, verbose)
+				applySyncResult(result, syncResult)
+			}
+
+			// For successful close commands, find related work in progress
+			if isCloseCommandFromArgs(cleanArgs) && bdResult.ExitCode == 0 {
+				closedBeadID := extractBeadIDFromArgs(cleanArgs)
+				if closedBeadID != "" {
+					if cmdResp != nil && cmdResp.Context != nil {
+						result.RelatedWork = findRelatedWorkInProgress(
+							closedBeadID,
+							cfg.WorkspaceID,
+							cmdResp.Context.BeadsInProgress,
+						)
+					}
 				}
 			}
 		}
@@ -531,6 +551,87 @@ func runPassthrough(args []string) (*PassthroughResult, error) {
 	}
 
 	return result, nil
+}
+
+func applySyncResult(result *PassthroughResult, syncResult *SyncResult) {
+	result.SyncWarning = syncResult.Warning
+	result.SyncStats = syncResult.Stats
+	result.SyncMode = syncResult.SyncMode
+	result.SyncConflicts = syncResult.Conflicts
+	result.SyncClaimRejected = syncResult.ClaimRejected
+	result.SyncClaimRejectedReason = syncResult.ClaimRejectedReason
+}
+
+func parseExplicitSyncArgs(args []string) (statusOnly bool, err error) {
+	command, commandIndex := bd.CommandIndexFromArgs(args)
+	if command != "sync" || commandIndex < 0 {
+		return false, fmt.Errorf("expected sync command")
+	}
+
+	for i := 0; i < len(args); i++ {
+		if i == commandIndex {
+			continue
+		}
+		arg := args[i]
+		switch {
+		case arg == "--status":
+			statusOnly = true
+		case arg == "--json", arg == "--no-daemon", arg == "--no-db":
+		case strings.HasPrefix(arg, "--db="):
+		case arg == "--db":
+			if i+1 >= len(args) || strings.HasPrefix(args[i+1], "-") {
+				return false, fmt.Errorf("--db requires a value")
+			}
+			i++
+		case strings.HasPrefix(arg, "-"):
+			return false, fmt.Errorf("unsupported bdh sync flag %q", arg)
+		default:
+			return false, fmt.Errorf("unexpected bdh sync argument %q", arg)
+		}
+	}
+
+	return statusOnly, nil
+}
+
+func formatExplicitSyncStatus(jsonMode bool) (string, error) {
+	state, err := sync.LoadState(beads.SyncStatePath())
+	if err != nil {
+		return "", fmt.Errorf("loading sync status: %w", err)
+	}
+
+	status := "never_synced"
+	lastSync := ""
+	if !state.LastSync.IsZero() {
+		status = "synced"
+		lastSync = state.LastSync.UTC().Format(time.RFC3339)
+	}
+	if jsonMode {
+		return jsonOutput(map[string]any{
+			"status":           status,
+			"last_sync":        lastSync,
+			"protocol_version": state.ProtocolVersion,
+			"tracked_issues":   len(state.IssueHashes),
+		})
+	}
+	if lastSync == "" {
+		return "BeadHub sync status: never synced\n", nil
+	}
+	return fmt.Sprintf(
+		"BeadHub sync status: synced\nLast successful sync: %s\nTracked issues: %d\nProtocol version: %d\n",
+		lastSync,
+		len(state.IssueHashes),
+		state.ProtocolVersion,
+	), nil
+}
+
+func explicitSyncFailure(syncResult *SyncResult) string {
+	if syncResult.Warning != "" {
+		return syncResult.Warning
+	}
+	if syncResult.Synced || syncResult.UpToDate {
+		return ""
+	}
+	return "sync did not complete"
 }
 
 func isJSONOutputRequested(args []string) bool {
@@ -808,6 +909,7 @@ func hasOtherClaimants(beadID, myWorkspaceID string, beadsInProgress []client.Be
 // SyncResult contains the result of syncing to BeadHub.
 type SyncResult struct {
 	Synced      bool
+	UpToDate    bool
 	Warning     string
 	IssuesCount int
 	// Sync mode and stats
@@ -916,6 +1018,7 @@ func syncToBeadHub(cfg *config.Config, bdArgs []string, verbose bool) *SyncResul
 
 		if len(changedIDs) == 0 && len(deletedIDs) == 0 {
 			// Nothing to upload.
+			result.UpToDate = true
 			return result
 		}
 

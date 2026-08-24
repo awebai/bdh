@@ -16,6 +16,7 @@ import (
 	"github.com/awebai/bdh/internal/beads"
 	"github.com/awebai/bdh/internal/client"
 	"github.com/awebai/bdh/internal/config"
+	"github.com/awebai/bdh/internal/sync"
 )
 
 // setupBeadsDir creates a .beads directory with a beads.db file so that
@@ -871,6 +872,282 @@ esac
 	}
 	if !syncCalled {
 		t.Error("expected /v1/bdh/sync to be called after create")
+	}
+}
+
+func TestPassthrough_ExplicitSyncUsesExportWithoutCallingBdSync(t *testing.T) {
+	if runtime.GOOS == "windows" {
+		t.Skip("test uses a sh stub for bd")
+	}
+
+	tmpDir := t.TempDir()
+	origDir, _ := os.Getwd()
+	defer os.Chdir(origDir)
+	os.Chdir(tmpDir)
+
+	setupBeadsDir(t)
+
+	binDir := filepath.Join(tmpDir, "bin")
+	if err := os.MkdirAll(binDir, 0755); err != nil {
+		t.Fatalf("mkdir bin: %v", err)
+	}
+	bdCalls := filepath.Join(tmpDir, "bd-calls")
+	bdPath := filepath.Join(binDir, "bd")
+	script := `#!/bin/sh
+set -e
+printf '%s\n' "$*" >> "$BD_CALLS"
+case "$1" in
+  export)
+    shift
+    while [ "$#" -gt 0 ]; do
+      if [ "$1" = "-o" ]; then
+        mkdir -p "$(dirname "$2")"
+        echo '{"id":"bd-1","title":"Test","status":"open"}' > "$2"
+        exit 0
+      fi
+      shift
+    done
+    exit 2
+    ;;
+  sync)
+    echo 'bd sync must not be invoked' >&2
+    exit 99
+    ;;
+esac
+`
+	if err := os.WriteFile(bdPath, []byte(script), 0755); err != nil {
+		t.Fatalf("write bd stub: %v", err)
+	}
+	t.Setenv("PATH", binDir+string(os.PathListSeparator)+os.Getenv("PATH"))
+	t.Setenv("BD_CALLS", bdCalls)
+	t.Setenv("BEADHUB_SKIP_REPO_CHECK", "1")
+
+	var syncCalled bool
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		switch r.URL.Path {
+		case "/v1/bdh/command":
+			_ = json.NewEncoder(w).Encode(map[string]any{"approved": true, "context": map[string]any{}})
+		case "/v1/chat/pending":
+			_ = json.NewEncoder(w).Encode(map[string]any{"pending": []any{}, "messages_waiting": 0})
+		case "/v1/bdh/sync":
+			syncCalled = true
+			_ = json.NewEncoder(w).Encode(map[string]any{
+				"synced":       true,
+				"issues_count": 1,
+				"stats": map[string]any{
+					"received": 1,
+					"inserted": 1,
+					"updated":  0,
+					"deleted":  0,
+				},
+			})
+		default:
+			w.WriteHeader(http.StatusNotFound)
+		}
+	}))
+	defer server.Close()
+
+	cfg := &config.Config{
+		WorkspaceID:     "a1b2c3d4-5678-90ab-cdef-1234567890ab",
+		BeadhubURL:      server.URL,
+		ProjectSlug:     "test-project",
+		RepoID:          "c3d4e5f6-7890-12cd-ef01-345678901234",
+		RepoOrigin:      "git@github.com:test/repo.git",
+		CanonicalOrigin: "github.com/test/repo",
+		Alias:           "test-agent",
+		HumanName:       "Test Human",
+	}
+	cfg.Save()
+
+	result, err := runPassthrough([]string{"sync", "--json"})
+	if err != nil {
+		t.Fatalf("runPassthrough error: %v", err)
+	}
+	if result.ExitCode != 0 {
+		t.Fatalf("explicit sync exit code = %d, stderr=%q", result.ExitCode, result.Stderr)
+	}
+	if !syncCalled {
+		t.Fatal("expected /v1/bdh/sync to be called")
+	}
+	if result.SyncStats == nil || result.SyncStats.Received != 1 || result.SyncStats.Inserted != 1 {
+		t.Fatalf("sync stats not preserved: %#v", result.SyncStats)
+	}
+
+	calls, err := os.ReadFile(bdCalls)
+	if err != nil {
+		t.Fatalf("read bd calls: %v", err)
+	}
+	callLines := strings.Split(strings.TrimSpace(string(calls)), "\n")
+	if len(callLines) != 1 || !strings.Contains(callLines[0], "export") {
+		t.Fatalf("expected only bd export, got %q", callLines)
+	}
+	if strings.HasPrefix(callLines[0], "sync") {
+		t.Fatalf("bd sync was invoked: %q", callLines)
+	}
+}
+
+func TestPassthrough_ExplicitSyncFailureIsNonZeroAndStructured(t *testing.T) {
+	if runtime.GOOS == "windows" {
+		t.Skip("test uses a sh stub for bd")
+	}
+
+	tmpDir := t.TempDir()
+	origDir, _ := os.Getwd()
+	defer os.Chdir(origDir)
+	os.Chdir(tmpDir)
+	setupBeadsDir(t)
+
+	binDir := filepath.Join(tmpDir, "bin")
+	if err := os.MkdirAll(binDir, 0755); err != nil {
+		t.Fatalf("mkdir bin: %v", err)
+	}
+	bdPath := filepath.Join(binDir, "bd")
+	script := `#!/bin/sh
+set -e
+if [ "$1" = "export" ]; then
+  shift
+  while [ "$#" -gt 0 ]; do
+    if [ "$1" = "-o" ]; then
+      mkdir -p "$(dirname "$2")"
+      echo '{"id":"bd-1","title":"Test","status":"open"}' > "$2"
+      exit 0
+    fi
+    shift
+  done
+fi
+exit 99
+`
+	if err := os.WriteFile(bdPath, []byte(script), 0755); err != nil {
+		t.Fatalf("write bd stub: %v", err)
+	}
+	t.Setenv("PATH", binDir+string(os.PathListSeparator)+os.Getenv("PATH"))
+	t.Setenv("BEADHUB_SKIP_REPO_CHECK", "1")
+
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		switch r.URL.Path {
+		case "/v1/bdh/command":
+			_ = json.NewEncoder(w).Encode(map[string]any{"approved": true, "context": map[string]any{}})
+		case "/v1/chat/pending":
+			_ = json.NewEncoder(w).Encode(map[string]any{"pending": []any{}, "messages_waiting": 0})
+		case "/v1/bdh/sync":
+			w.WriteHeader(http.StatusInternalServerError)
+			_, _ = w.Write([]byte("database unavailable"))
+		default:
+			w.WriteHeader(http.StatusNotFound)
+		}
+	}))
+	defer server.Close()
+
+	cfg := &config.Config{
+		WorkspaceID:     "a1b2c3d4-5678-90ab-cdef-1234567890ab",
+		BeadhubURL:      server.URL,
+		ProjectSlug:     "test-project",
+		RepoID:          "c3d4e5f6-7890-12cd-ef01-345678901234",
+		RepoOrigin:      "git@github.com:test/repo.git",
+		CanonicalOrigin: "github.com/test/repo",
+		Alias:           "test-agent",
+		HumanName:       "Test Human",
+	}
+	cfg.Save()
+
+	result, err := runPassthrough([]string{"sync", "--json"})
+	if err != nil {
+		t.Fatalf("runPassthrough error: %v", err)
+	}
+	if result.ExitCode == 0 {
+		t.Fatal("explicit sync reported success after server failure")
+	}
+	if !strings.Contains(result.SyncWarning, "500") {
+		t.Fatalf("expected actionable sync warning, got %q", result.SyncWarning)
+	}
+
+	var output passthroughJSON
+	if err := json.Unmarshal([]byte(formatPassthroughOutput(result)), &output); err != nil {
+		t.Fatalf("decode JSON output: %v", err)
+	}
+	if output.BDExitCode == 0 || !strings.Contains(output.SyncWarning, "500") {
+		t.Fatalf("JSON output hid explicit sync failure: %#v", output)
+	}
+
+	result.JSONMode = false
+	human := formatPassthroughOutput(result)
+	if !strings.Contains(human, "Warning: sync failed (500)") {
+		t.Fatalf("human output hid explicit sync failure: %q", human)
+	}
+}
+
+func TestPassthrough_SyncStatusIsReadOnly(t *testing.T) {
+	if runtime.GOOS == "windows" {
+		t.Skip("test uses a sh stub for bd")
+	}
+
+	tmpDir := t.TempDir()
+	origDir, _ := os.Getwd()
+	defer os.Chdir(origDir)
+	os.Chdir(tmpDir)
+	setupBeadsDir(t)
+	t.Setenv("BEADHUB_SKIP_REPO_CHECK", "1")
+
+	state := &sync.SyncState{
+		LastSync:        time.Date(2026, 8, 24, 19, 0, 0, 0, time.UTC),
+		ProtocolVersion: 3,
+		IssueHashes:     map[string]string{"bd-1": "hash"},
+	}
+	if err := sync.SaveState(beads.SyncStatePath(), state); err != nil {
+		t.Fatalf("save sync state: %v", err)
+	}
+
+	binDir := filepath.Join(tmpDir, "bin")
+	if err := os.MkdirAll(binDir, 0755); err != nil {
+		t.Fatalf("mkdir bin: %v", err)
+	}
+	bdPath := filepath.Join(binDir, "bd")
+	if err := os.WriteFile(bdPath, []byte("#!/bin/sh\necho 'bd must not run' >&2\nexit 99\n"), 0755); err != nil {
+		t.Fatalf("write bd stub: %v", err)
+	}
+	t.Setenv("PATH", binDir+string(os.PathListSeparator)+os.Getenv("PATH"))
+
+	var syncCalled bool
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		switch r.URL.Path {
+		case "/v1/bdh/command":
+			_ = json.NewEncoder(w).Encode(map[string]any{"approved": true, "context": map[string]any{}})
+		case "/v1/chat/pending":
+			_ = json.NewEncoder(w).Encode(map[string]any{"pending": []any{}, "messages_waiting": 0})
+		case "/v1/bdh/sync":
+			syncCalled = true
+			w.WriteHeader(http.StatusNoContent)
+		default:
+			w.WriteHeader(http.StatusNotFound)
+		}
+	}))
+	defer server.Close()
+
+	cfg := &config.Config{
+		WorkspaceID:     "a1b2c3d4-5678-90ab-cdef-1234567890ab",
+		BeadhubURL:      server.URL,
+		ProjectSlug:     "test-project",
+		RepoID:          "c3d4e5f6-7890-12cd-ef01-345678901234",
+		RepoOrigin:      "git@github.com:test/repo.git",
+		CanonicalOrigin: "github.com/test/repo",
+		Alias:           "test-agent",
+		HumanName:       "Test Human",
+	}
+	cfg.Save()
+
+	result, err := runPassthrough([]string{"sync", "--status", "--json"})
+	if err != nil {
+		t.Fatalf("runPassthrough error: %v", err)
+	}
+	if result.ExitCode != 0 || syncCalled {
+		t.Fatalf("status must be read-only: exit=%d syncCalled=%t", result.ExitCode, syncCalled)
+	}
+	var status map[string]any
+	if err := json.Unmarshal([]byte(result.Stdout), &status); err != nil {
+		t.Fatalf("decode status output: %v", err)
+	}
+	if status["status"] != "synced" || status["tracked_issues"] != float64(1) {
+		t.Fatalf("unexpected status: %#v", status)
 	}
 }
 
