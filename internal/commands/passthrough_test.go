@@ -52,6 +52,24 @@ func stubBdVersion(t *testing.T) {
 	t.Setenv("PATH", binDir+string(os.PathListSeparator)+os.Getenv("PATH"))
 }
 
+func newDroppingHTTPServer(t *testing.T) *httptest.Server {
+	t.Helper()
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+		hijacker, ok := w.(http.Hijacker)
+		if !ok {
+			t.Fatal("test server does not support connection hijacking")
+		}
+		conn, _, err := hijacker.Hijack()
+		if err != nil {
+			t.Errorf("hijack connection: %v", err)
+			return
+		}
+		_ = conn.Close()
+	}))
+	t.Cleanup(server.Close)
+	return server
+}
+
 func TestPassthrough_PreservesArgsWhenInvokingBd(t *testing.T) {
 	if runtime.GOOS == "windows" {
 		t.Skip("test uses a sh stub for bd")
@@ -446,11 +464,14 @@ func TestPassthrough_RunsBdWhenServerUnreachable(t *testing.T) {
 	// Create .beads directory
 	setupBeadsDir(t)
 	stubBdVersion(t)
+	server := newDroppingHTTPServer(t)
+	t.Setenv("BEADHUB_URL", server.URL)
+	t.Setenv("BEADHUB_API_KEY", "")
 
 	// Create .beadhub config pointing to unreachable server
 	cfg := &config.Config{
 		WorkspaceID:     "a1b2c3d4-5678-90ab-cdef-1234567890ab",
-		BeadhubURL:      "http://localhost:59999", // unreachable
+		BeadhubURL:      server.URL,
 		ProjectSlug:     "test-project",
 		RepoID:          "c3d4e5f6-7890-12cd-ef01-345678901234",
 		RepoOrigin:      "git@github.com:test/repo.git",
@@ -482,10 +503,13 @@ func TestPassthrough_ShowsWarningWhenServerUnreachable(t *testing.T) {
 
 	setupBeadsDir(t)
 	stubBdVersion(t)
+	server := newDroppingHTTPServer(t)
+	t.Setenv("BEADHUB_URL", server.URL)
+	t.Setenv("BEADHUB_API_KEY", "")
 
 	cfg := &config.Config{
 		WorkspaceID:     "a1b2c3d4-5678-90ab-cdef-1234567890ab",
-		BeadhubURL:      "http://localhost:59999",
+		BeadhubURL:      server.URL,
 		ProjectSlug:     "test-project",
 		RepoID:          "c3d4e5f6-7890-12cd-ef01-345678901234",
 		RepoOrigin:      "git@github.com:test/repo.git",

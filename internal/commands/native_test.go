@@ -625,6 +625,7 @@ func TestPassthrough_NativeModeListWorks(t *testing.T) {
 		}
 	}))
 	defer server.Close()
+	t.Setenv("BEADHUB_URL", server.URL)
 
 	cfg := &config.Config{
 		WorkspaceID:     "a1b2c3d4-5678-90ab-cdef-1234567890ab",
@@ -1900,6 +1901,7 @@ func TestPassthrough_NativeModeUnsupportedCommand(t *testing.T) {
 		}
 	}))
 	defer server.Close()
+	t.Setenv("BEADHUB_URL", server.URL)
 
 	cfg := &config.Config{
 		WorkspaceID:     "a1b2c3d4-5678-90ab-cdef-1234567890ab",
