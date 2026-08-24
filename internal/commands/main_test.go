@@ -32,6 +32,20 @@ func TestMain(m *testing.M) {
 		fmt.Fprintf(os.Stderr, "set test PATH: %v\n", err)
 		os.Exit(1)
 	}
+	// Tests must never inherit a developer's live BeadHub endpoint, key, or
+	// selected account. Tests that exercise environment precedence replace
+	// these isolated defaults with t.Setenv.
+	for name, value := range map[string]string{
+		"AW_CONFIG_PATH":  "",
+		"BEADHUB_API_KEY": "",
+		"BEADHUB_URL":     "",
+		"HOME":            binDir,
+	} {
+		if err := os.Setenv(name, value); err != nil {
+			fmt.Fprintf(os.Stderr, "set test %s: %v\n", name, err)
+			os.Exit(1)
+		}
+	}
 
 	code := m.Run()
 	if err := os.RemoveAll(binDir); err != nil {
