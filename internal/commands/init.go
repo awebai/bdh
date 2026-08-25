@@ -642,8 +642,16 @@ func runInitWithNewEndpoint(needsBeadsInit bool) error {
 				initReq.AcceptPolicies = true
 				initResp, err = c.Init(context.Background(), initReq)
 				if err != nil {
-					return fmt.Errorf("failed to initialize workspace after policy acceptance: %w", err)
+					retryClientErr, retryIsClientErr := err.(*client.Error)
+					if !retryIsClientErr {
+						return fmt.Errorf("failed to initialize workspace after policy acceptance: %w", err)
+					}
+					clientErr = retryClientErr
 				}
+			}
+
+			if err == nil {
+				// Policy retry completed the init; continue with the successful response.
 			} else if strings.Contains(clientErr.Body, "project_not_found") {
 				// Repo not registered, need project_slug
 				fmt.Println("Repo not registered. Creating new project...")
