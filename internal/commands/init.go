@@ -21,19 +21,26 @@ import (
 
 const defaultWorkspaceRole = "developer"
 
+const (
+	currentPolicyVersion = "2026-08-25-awebai-transition"
+	currentTermsURL      = "https://beadhub.ai/terms/"
+	currentPrivacyURL    = "https://beadhub.ai/privacy/"
+)
+
 // CLI flags for init command
 var (
-	initURL        string
-	initAlias      string
-	initHuman      string
-	initProject    string
-	initRole       string
-	initEmail      string
-	initUpdate     bool
-	initInjectDocs bool
-	initSetupHooks bool
-	initRefreshKey bool
-	initAPIKey     string
+	initURL         string
+	initAlias       string
+	initHuman       string
+	initProject     string
+	initRole        string
+	initEmail       string
+	initUpdate      bool
+	initInjectDocs  bool
+	initSetupHooks  bool
+	initRefreshKey  bool
+	initAPIKey      string
+	initAcceptTerms bool
 )
 
 var initCmd = &cobra.Command{
@@ -81,6 +88,12 @@ func init() {
 	initCmd.Flags().BoolVar(&initRefreshKey, "refresh-key", false, "Refresh the workspace API key (Cloud; fixes coordination 403s)")
 	initCmd.Flags().StringVar(&initAPIKey, "api-key", "", "API key for non-interactive auth (skips email prompt)")
 	initCmd.Flags().StringVar(&initEmail, "email", "", "Email for Cloud validation")
+	initCmd.Flags().BoolVar(
+		&initAcceptTerms,
+		"accept-terms",
+		false,
+		"Accept the current hosted BeadHub Terms and Privacy Notice",
+	)
 }
 
 // isTTY returns true if stdin is a terminal.
@@ -572,6 +585,10 @@ func runInitWithNewEndpoint(needsBeadsInit bool) error {
 		Hostname:      hostname,
 		WorkspacePath: workspacePath,
 	}
+	if initAcceptTerms && initAPIKey == "" {
+		initReq.PolicyVersion = currentPolicyVersion
+		initReq.AcceptPolicies = true
+	}
 
 	// Get project slug if provided via flag/env
 	projectSlug := resolveConfig(initProject, "BEADHUB_PROJECT", "")
@@ -597,8 +614,37 @@ func runInitWithNewEndpoint(needsBeadsInit bool) error {
 			if initAPIKey != "" && clientErr.StatusCode == 401 {
 				return fmt.Errorf("API key rejected (401): %s\nTry: bdh :init --refresh-key", clientErr.Body)
 			}
-			// Parse error body for code
-			if strings.Contains(clientErr.Body, "project_not_found") {
+			// New or returning humans are prompted only when the hosted server says
+			// their current versioned acceptance is missing. API-key init is unaffected.
+			if clientErr.StatusCode == 428 && strings.Contains(clientErr.Body, "policy_acceptance_required") {
+				if !isTTY() && !initAcceptTerms {
+					return fmt.Errorf(
+						"hosted BeadHub requires acceptance of its current Terms and Privacy Notice\nTerms: %s\nPrivacy: %s\nReview them, then rerun with --accept-terms",
+						currentTermsURL,
+						currentPrivacyURL,
+					)
+				}
+				if !initAcceptTerms {
+					fmt.Printf("Hosted BeadHub Terms: %s\n", currentTermsURL)
+					fmt.Printf("Privacy Notice: %s\n", currentPrivacyURL)
+					fmt.Print("Accept these policies for your BeadHub account? (y/n): ")
+					reader := bufio.NewReader(os.Stdin)
+					answer, readErr := reader.ReadString('\n')
+					if readErr != nil {
+						return fmt.Errorf("reading policy acceptance: %w", readErr)
+					}
+					answer = strings.TrimSpace(strings.ToLower(answer))
+					if answer != "y" && answer != "yes" {
+						return fmt.Errorf("policy acceptance declined")
+					}
+				}
+				initReq.PolicyVersion = currentPolicyVersion
+				initReq.AcceptPolicies = true
+				initResp, err = c.Init(context.Background(), initReq)
+				if err != nil {
+					return fmt.Errorf("failed to initialize workspace after policy acceptance: %w", err)
+				}
+			} else if strings.Contains(clientErr.Body, "project_not_found") {
 				// Repo not registered, need project_slug
 				fmt.Println("Repo not registered. Creating new project...")
 				if projectSlug == "" {

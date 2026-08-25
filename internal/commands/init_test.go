@@ -23,6 +23,7 @@ func resetInitFlags() {
 	initUpdate = false
 	initInjectDocs = false
 	initAPIKey = ""
+	initAcceptTerms = false
 }
 
 func setupTempWorkspace(t *testing.T) string {
@@ -1022,6 +1023,76 @@ func TestInitCommand_APIKeyUsesBearer(t *testing.T) {
 
 	if gotEmail != "" {
 		t.Errorf("email should be empty when using --api-key, got %q", gotEmail)
+	}
+}
+
+func TestInitCommand_PolicyAcceptanceRequiredExplainsNonInteractiveRecovery(t *testing.T) {
+	setupTempWorkspace(t)
+
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.WriteHeader(http.StatusPreconditionRequired)
+		_, _ = w.Write([]byte(`{"detail":{"code":"policy_acceptance_required"}}`))
+	}))
+	defer server.Close()
+
+	t.Setenv("BEADHUB_URL", server.URL)
+	t.Setenv("BEADHUB_REPO_ORIGIN", "git@github.com:test/policy-required.git")
+	t.Setenv("BEADHUB_EMAIL", "policy-required@example.com")
+	t.Setenv("BEADHUB_HUMAN", "Policy User")
+	t.Setenv("BEADHUB_ALIAS", "alice")
+	t.Setenv("BEADHUB_PROJECT", "policy-required")
+
+	err := runInit()
+	if err == nil {
+		t.Fatal("runInit() should require explicit policy acceptance")
+	}
+	for _, want := range []string{currentTermsURL, currentPrivacyURL, "--accept-terms"} {
+		if !strings.Contains(err.Error(), want) {
+			t.Fatalf("error %q does not contain %q", err, want)
+		}
+	}
+}
+
+func TestInitCommand_AcceptTermsSendsExactVersion(t *testing.T) {
+	setupTempWorkspace(t)
+
+	var gotVersion string
+	var gotAcceptance bool
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		var req struct {
+			PolicyVersion  string `json:"policy_version"`
+			AcceptPolicies bool   `json:"accept_policies"`
+		}
+		_ = json.NewDecoder(r.Body).Decode(&req)
+		gotVersion = req.PolicyVersion
+		gotAcceptance = req.AcceptPolicies
+		_ = json.NewEncoder(w).Encode(map[string]any{
+			"status":           "pending_validation",
+			"api_key":          "bh_sk_123456789012345678901234567890123456",
+			"project_id":       "proj-policy",
+			"project_slug":     "policy-accepted",
+			"repo_id":          "c3d4e5f6-7890-12cd-ef01-345678901234",
+			"canonical_origin": "github.com/test/policy-accepted",
+			"workspace_id":     "a1b2c3d4-5678-90ab-cdef-1234567890ab",
+			"alias":            "alice",
+			"created":          true,
+		})
+	}))
+	defer server.Close()
+
+	t.Setenv("BEADHUB_URL", server.URL)
+	t.Setenv("BEADHUB_REPO_ORIGIN", "git@github.com:test/policy-accepted.git")
+	t.Setenv("BEADHUB_EMAIL", "policy-accepted@example.com")
+	t.Setenv("BEADHUB_HUMAN", "Policy User")
+	t.Setenv("BEADHUB_ALIAS", "alice")
+	t.Setenv("BEADHUB_PROJECT", "policy-accepted")
+	initAcceptTerms = true
+
+	if err := runInit(); err != nil {
+		t.Fatalf("runInit() error: %v", err)
+	}
+	if gotVersion != currentPolicyVersion || !gotAcceptance {
+		t.Fatalf("policy payload = (%q, %v), want (%q, true)", gotVersion, gotAcceptance, currentPolicyVersion)
 	}
 }
 
