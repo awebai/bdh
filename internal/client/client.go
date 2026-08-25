@@ -182,17 +182,15 @@ func (c *Client) EnsureProject(ctx context.Context, req *EnsureProjectRequest) (
 
 // InitRequest is the request body for POST /v1/init.
 type InitRequest struct {
-	RepoOrigin     string  `json:"repo_origin"`
-	Alias          *string `json:"alias,omitempty"`
-	HumanName      string  `json:"human_name,omitempty"`
-	Role           string  `json:"role,omitempty"`
-	ProjectSlug    string  `json:"project_slug,omitempty"`
-	Email          string  `json:"email,omitempty"` // For Cloud (ignored by OSS)
-	Username       string  `json:"username,omitempty"`
-	Hostname       string  `json:"hostname,omitempty"`
-	WorkspacePath  string  `json:"workspace_path,omitempty"`
-	PolicyVersion  string  `json:"policy_version,omitempty"`
-	AcceptPolicies bool    `json:"accept_policies,omitempty"`
+	RepoOrigin    string  `json:"repo_origin"`
+	Alias         *string `json:"alias,omitempty"`
+	HumanName     string  `json:"human_name,omitempty"`
+	Role          string  `json:"role,omitempty"`
+	ProjectSlug   string  `json:"project_slug,omitempty"`
+	Email         string  `json:"email,omitempty"` // For Cloud (ignored by OSS)
+	Username      string  `json:"username,omitempty"`
+	Hostname      string  `json:"hostname,omitempty"`
+	WorkspacePath string  `json:"workspace_path,omitempty"`
 }
 
 // InitResponse is the response from POST /v1/init.
@@ -753,7 +751,6 @@ func (c *Client) ActivePolicyFetch(ctx context.Context, reqParams *ActivePolicyR
 		ETag:         resp.Header.Get("ETag"),
 		LastModified: resp.Header.Get("Last-Modified"),
 	}
-
 
 		if resp.StatusCode == http.StatusNotModified {
 			return meta, nil

@@ -25,7 +25,6 @@ func resetInitFlags() {
 	initUpdate = false
 	initInjectDocs = false
 	initAPIKey = ""
-	initAcceptTerms = false
 }
 
 func setupTempWorkspace(t *testing.T) string {
@@ -1028,40 +1027,19 @@ func TestInitCommand_APIKeyUsesBearer(t *testing.T) {
 	}
 }
 
-func TestInitCommand_PolicyAcceptanceRequiredExplainsNonInteractiveRecovery(t *testing.T) {
-	setupTempWorkspace(t)
-
-	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		w.WriteHeader(http.StatusPreconditionRequired)
-		_, _ = w.Write([]byte(`{"detail":{"code":"policy_acceptance_required"}}`))
-	}))
-	defer server.Close()
-
-	t.Setenv("BEADHUB_URL", server.URL)
-	t.Setenv("BEADHUB_REPO_ORIGIN", "git@github.com:test/policy-required.git")
-	t.Setenv("BEADHUB_EMAIL", "policy-required@example.com")
-	t.Setenv("BEADHUB_USERNAME", "policy-required")
-	t.Setenv("BEADHUB_HUMAN", "Policy User")
-	t.Setenv("BEADHUB_ALIAS", "alice")
-	t.Setenv("BEADHUB_PROJECT", "policy-required")
-
-	err := runInit()
-	if err == nil {
-		t.Fatal("runInit() should require explicit policy acceptance")
-	}
-	for _, want := range []string{currentTermsURL, currentPrivacyURL, "--accept-terms"} {
-		if !strings.Contains(err.Error(), want) {
-			t.Fatalf("error %q does not contain %q", err, want)
-		}
-	}
-}
-
-func TestInitCommand_ExistingAccountPolicyRequiresAuthenticatedAcceptance(t *testing.T) {
+func TestInitCommand_HostedEmailInitRequiresAuthenticatedAcceptance(t *testing.T) {
 	setupTempWorkspace(t)
 
 	requestCount := 0
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		requestCount++
+		var req struct {
+			Username string `json:"username"`
+		}
+		_ = json.NewDecoder(r.Body).Decode(&req)
+		if req.Username != "policy-existing" {
+			t.Fatalf("username = %q, want server-compatible Cloud username", req.Username)
+		}
 		w.WriteHeader(http.StatusPreconditionRequired)
 		_, _ = w.Write([]byte(`{"detail":{"code":"authenticated_policy_acceptance_required"}}`))
 	}))
@@ -1081,118 +1059,8 @@ func TestInitCommand_ExistingAccountPolicyRequiresAuthenticatedAcceptance(t *tes
 	if !strings.Contains(err.Error(), "https://app.beadhub.ai") {
 		t.Fatalf("error %q does not explain authenticated recovery", err)
 	}
-	if strings.Contains(err.Error(), "--accept-terms") {
-		t.Fatalf("error %q incorrectly offers unauthenticated acceptance", err)
-	}
 	if requestCount != 1 {
 		t.Fatalf("request count = %d, want 1", requestCount)
-	}
-}
-
-func TestInitCommand_AcceptTermsSendsExactVersion(t *testing.T) {
-	setupTempWorkspace(t)
-
-	var gotVersion string
-	var gotAcceptance bool
-	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		var req struct {
-			PolicyVersion  string `json:"policy_version"`
-			AcceptPolicies bool   `json:"accept_policies"`
-		}
-		_ = json.NewDecoder(r.Body).Decode(&req)
-		gotVersion = req.PolicyVersion
-		gotAcceptance = req.AcceptPolicies
-		_ = json.NewEncoder(w).Encode(map[string]any{
-			"status":           "pending_validation",
-			"api_key":          "bh_sk_123456789012345678901234567890123456",
-			"project_id":       "proj-policy",
-			"project_slug":     "policy-accepted",
-			"repo_id":          "c3d4e5f6-7890-12cd-ef01-345678901234",
-			"canonical_origin": "github.com/test/policy-accepted",
-			"workspace_id":     "a1b2c3d4-5678-90ab-cdef-1234567890ab",
-			"alias":            "alice",
-			"created":          true,
-		})
-	}))
-	defer server.Close()
-
-	t.Setenv("BEADHUB_URL", server.URL)
-	t.Setenv("BEADHUB_REPO_ORIGIN", "git@github.com:test/policy-accepted.git")
-	t.Setenv("BEADHUB_EMAIL", "policy-accepted@example.com")
-	t.Setenv("BEADHUB_USERNAME", "policy-accepted")
-	t.Setenv("BEADHUB_HUMAN", "Policy User")
-	t.Setenv("BEADHUB_ALIAS", "alice")
-	t.Setenv("BEADHUB_PROJECT", "policy-accepted")
-	initAcceptTerms = true
-
-	if err := runInit(); err != nil {
-		t.Fatalf("runInit() error: %v", err)
-	}
-	if gotVersion != currentPolicyVersion || !gotAcceptance {
-		t.Fatalf("policy payload = (%q, %v), want (%q, true)", gotVersion, gotAcceptance, currentPolicyVersion)
-	}
-}
-
-func TestInitCommand_PolicyRetryContinuesIntoProjectCreation(t *testing.T) {
-	setupTempWorkspace(t)
-
-	requestCount := 0
-	var finalProjectSlug string
-	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		requestCount++
-		var req struct {
-			ProjectSlug    string `json:"project_slug"`
-			Username       string `json:"username"`
-			PolicyVersion  string `json:"policy_version"`
-			AcceptPolicies bool   `json:"accept_policies"`
-		}
-		_ = json.NewDecoder(r.Body).Decode(&req)
-		switch requestCount {
-		case 1:
-			if req.Username != "policy-retry" {
-				t.Fatalf("username = %q, want server-compatible Cloud username", req.Username)
-			}
-			w.WriteHeader(http.StatusPreconditionRequired)
-			_, _ = w.Write([]byte(`{"detail":{"code":"policy_acceptance_required"}}`))
-		case 2:
-			if req.PolicyVersion != currentPolicyVersion || !req.AcceptPolicies {
-				t.Fatalf("policy retry omitted exact acceptance: %#v", req)
-			}
-			w.WriteHeader(http.StatusUnprocessableEntity)
-			_, _ = w.Write([]byte(`{"detail":{"code":"project_not_found"}}`))
-		default:
-			finalProjectSlug = req.ProjectSlug
-			_ = json.NewEncoder(w).Encode(map[string]any{
-				"status":           "pending_validation",
-				"api_key":          "bh_sk_123456789012345678901234567890123456",
-				"project_id":       "proj-policy-retry",
-				"project_slug":     req.ProjectSlug,
-				"repo_id":          "c3d4e5f6-7890-12cd-ef01-345678901234",
-				"canonical_origin": "github.com/test/policy-retry",
-				"workspace_id":     "a1b2c3d4-5678-90ab-cdef-1234567890ab",
-				"alias":            "alice",
-				"created":          true,
-			})
-		}
-	}))
-	defer server.Close()
-
-	t.Setenv("BEADHUB_URL", server.URL)
-	t.Setenv("BEADHUB_REPO_ORIGIN", "git@github.com:test/policy-retry.git")
-	t.Setenv("BEADHUB_EMAIL", "policy-retry@example.com")
-	t.Setenv("BEADHUB_USERNAME", "policy-retry")
-	t.Setenv("BEADHUB_HUMAN", "Policy Retry")
-	t.Setenv("BEADHUB_ALIAS", "alice")
-	initAcceptTerms = true
-
-	if err := runInit(); err != nil {
-		t.Fatalf("runInit() error: %v", err)
-	}
-	if requestCount != 3 {
-		t.Fatalf("request count = %d, want 3", requestCount)
-	}
-	if finalProjectSlug == "" {
-		t.Fatal("project creation retry omitted project_slug")
 	}
 }
 
