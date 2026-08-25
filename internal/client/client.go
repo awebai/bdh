@@ -188,6 +188,7 @@ type InitRequest struct {
 	Role           string  `json:"role,omitempty"`
 	ProjectSlug    string  `json:"project_slug,omitempty"`
 	Email          string  `json:"email,omitempty"` // For Cloud (ignored by OSS)
+	Username       string  `json:"username,omitempty"`
 	Hostname       string  `json:"hostname,omitempty"`
 	WorkspacePath  string  `json:"workspace_path,omitempty"`
 	PolicyVersion  string  `json:"policy_version,omitempty"`

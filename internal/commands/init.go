@@ -35,6 +35,7 @@ var (
 	initProject     string
 	initRole        string
 	initEmail       string
+	initUsername    string
 	initUpdate      bool
 	initInjectDocs  bool
 	initSetupHooks  bool
@@ -88,6 +89,7 @@ func init() {
 	initCmd.Flags().BoolVar(&initRefreshKey, "refresh-key", false, "Refresh the workspace API key (Cloud; fixes coordination 403s)")
 	initCmd.Flags().StringVar(&initAPIKey, "api-key", "", "API key for non-interactive auth (skips email prompt)")
 	initCmd.Flags().StringVar(&initEmail, "email", "", "Email for Cloud validation")
+	initCmd.Flags().StringVar(&initUsername, "username", "", "Username for first-time Cloud account creation")
 	initCmd.Flags().BoolVar(
 		&initAcceptTerms,
 		"accept-terms",
@@ -490,8 +492,13 @@ func runInitWithNewEndpoint(needsBeadsInit bool) error {
 	}
 	humanName := resolveConfig(initHuman, "BEADHUB_HUMAN", getDefaultHumanName())
 	email := ""
+	username := ""
 	if initAPIKey == "" {
 		email = resolveConfig(initEmail, "BEADHUB_EMAIL", "")
+		username = resolveConfig(initUsername, "BEADHUB_USERNAME", "")
+		if email != "" && username == "" {
+			return fmt.Errorf("username is required with email-based init (use --username or BEADHUB_USERNAME)")
+		}
 	}
 
 	// Get role with priority: CLI flag > env var > prompt (TTY) > default
@@ -582,6 +589,7 @@ func runInitWithNewEndpoint(needsBeadsInit bool) error {
 		HumanName:     humanName,
 		Role:          role,
 		Email:         email,
+		Username:      username,
 		Hostname:      hostname,
 		WorkspacePath: workspacePath,
 	}
@@ -613,6 +621,9 @@ func runInitWithNewEndpoint(needsBeadsInit bool) error {
 			// API key auth: 401 means invalid/expired key — fail immediately
 			if initAPIKey != "" && clientErr.StatusCode == 401 {
 				return fmt.Errorf("API key rejected (401): %s\nTry: bdh :init --refresh-key", clientErr.Body)
+			}
+			if clientErr.StatusCode == 428 && strings.Contains(clientErr.Body, "authenticated_policy_acceptance_required") {
+				return fmt.Errorf("accept the current hosted policies while signed in at https://app.beadhub.ai, then retry with an existing API key")
 			}
 			// New or returning humans are prompted only when the hosted server says
 			// their current versioned acceptance is missing. API-key init is unaffected.

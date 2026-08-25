@@ -20,6 +20,8 @@ func resetInitFlags() {
 	initHuman = ""
 	initProject = ""
 	initRole = ""
+	initEmail = ""
+	initUsername = ""
 	initUpdate = false
 	initInjectDocs = false
 	initAPIKey = ""
@@ -1038,6 +1040,7 @@ func TestInitCommand_PolicyAcceptanceRequiredExplainsNonInteractiveRecovery(t *t
 	t.Setenv("BEADHUB_URL", server.URL)
 	t.Setenv("BEADHUB_REPO_ORIGIN", "git@github.com:test/policy-required.git")
 	t.Setenv("BEADHUB_EMAIL", "policy-required@example.com")
+	t.Setenv("BEADHUB_USERNAME", "policy-required")
 	t.Setenv("BEADHUB_HUMAN", "Policy User")
 	t.Setenv("BEADHUB_ALIAS", "alice")
 	t.Setenv("BEADHUB_PROJECT", "policy-required")
@@ -1050,6 +1053,39 @@ func TestInitCommand_PolicyAcceptanceRequiredExplainsNonInteractiveRecovery(t *t
 		if !strings.Contains(err.Error(), want) {
 			t.Fatalf("error %q does not contain %q", err, want)
 		}
+	}
+}
+
+func TestInitCommand_ExistingAccountPolicyRequiresAuthenticatedAcceptance(t *testing.T) {
+	setupTempWorkspace(t)
+
+	requestCount := 0
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		requestCount++
+		w.WriteHeader(http.StatusPreconditionRequired)
+		_, _ = w.Write([]byte(`{"detail":{"code":"authenticated_policy_acceptance_required"}}`))
+	}))
+	defer server.Close()
+
+	t.Setenv("BEADHUB_URL", server.URL)
+	t.Setenv("BEADHUB_REPO_ORIGIN", "git@github.com:test/policy-existing.git")
+	t.Setenv("BEADHUB_EMAIL", "policy-existing@example.com")
+	t.Setenv("BEADHUB_USERNAME", "policy-existing")
+	t.Setenv("BEADHUB_ALIAS", "alice")
+	t.Setenv("BEADHUB_PROJECT", "policy-existing")
+
+	err := runInit()
+	if err == nil {
+		t.Fatal("runInit() should require authenticated policy acceptance")
+	}
+	if !strings.Contains(err.Error(), "https://app.beadhub.ai") {
+		t.Fatalf("error %q does not explain authenticated recovery", err)
+	}
+	if strings.Contains(err.Error(), "--accept-terms") {
+		t.Fatalf("error %q incorrectly offers unauthenticated acceptance", err)
+	}
+	if requestCount != 1 {
+		t.Fatalf("request count = %d, want 1", requestCount)
 	}
 }
 
@@ -1083,6 +1119,7 @@ func TestInitCommand_AcceptTermsSendsExactVersion(t *testing.T) {
 	t.Setenv("BEADHUB_URL", server.URL)
 	t.Setenv("BEADHUB_REPO_ORIGIN", "git@github.com:test/policy-accepted.git")
 	t.Setenv("BEADHUB_EMAIL", "policy-accepted@example.com")
+	t.Setenv("BEADHUB_USERNAME", "policy-accepted")
 	t.Setenv("BEADHUB_HUMAN", "Policy User")
 	t.Setenv("BEADHUB_ALIAS", "alice")
 	t.Setenv("BEADHUB_PROJECT", "policy-accepted")
@@ -1105,12 +1142,16 @@ func TestInitCommand_PolicyRetryContinuesIntoProjectCreation(t *testing.T) {
 		requestCount++
 		var req struct {
 			ProjectSlug    string `json:"project_slug"`
+			Username       string `json:"username"`
 			PolicyVersion  string `json:"policy_version"`
 			AcceptPolicies bool   `json:"accept_policies"`
 		}
 		_ = json.NewDecoder(r.Body).Decode(&req)
 		switch requestCount {
 		case 1:
+			if req.Username != "policy-retry" {
+				t.Fatalf("username = %q, want server-compatible Cloud username", req.Username)
+			}
 			w.WriteHeader(http.StatusPreconditionRequired)
 			_, _ = w.Write([]byte(`{"detail":{"code":"policy_acceptance_required"}}`))
 		case 2:
@@ -1139,6 +1180,7 @@ func TestInitCommand_PolicyRetryContinuesIntoProjectCreation(t *testing.T) {
 	t.Setenv("BEADHUB_URL", server.URL)
 	t.Setenv("BEADHUB_REPO_ORIGIN", "git@github.com:test/policy-retry.git")
 	t.Setenv("BEADHUB_EMAIL", "policy-retry@example.com")
+	t.Setenv("BEADHUB_USERNAME", "policy-retry")
 	t.Setenv("BEADHUB_HUMAN", "Policy Retry")
 	t.Setenv("BEADHUB_ALIAS", "alice")
 	initAcceptTerms = true
